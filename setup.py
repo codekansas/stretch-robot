@@ -19,7 +19,6 @@ setup(
     install_requires=[
         "aiohttp",
         "aiortc",
-        "opencv-python",
     ],
     python_requires=">=3.8",
     extras_require={

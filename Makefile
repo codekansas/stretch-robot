@@ -1,11 +1,16 @@
 # Makefile
 
-all: install
+all: refresh
 .PHONY: all
 
 # --------------
 # Build commands
 # --------------
+
+refresh:
+	git checkout master
+	git pull
+	pip install -e '.[dev]'
 
 install:
 	pip install -e '.[dev]'
