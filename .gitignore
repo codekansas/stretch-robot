@@ -1,0 +1,17 @@
+# .gitignore
+
+# Go
+.go/
+
+# Python
+*.py[oc]
+__pycache__/
+*.egg-info
+
+# Databases
+*.db
+
+# Build artifacts
+build/
+dist/
+*.so

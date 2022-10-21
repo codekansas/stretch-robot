@@ -2,6 +2,32 @@
 
 Stretch robot control code
 
+## Getting Started
+
+1. Create a Conda environment:
+
+```bash
+conda create --name stretch python=3.8
+```
+
+2. Install dependencies:
+
+```bash
+make install-dependencies
+```
+
+3. Install the package:
+
+```bash
+make install
+```
+
+4. Run the bot:
+
+```bash
+bot
+```
+
 ## References
 
 - Hello Robot repositories
