@@ -8,7 +8,7 @@ include = '\.pyi?$'
 [tool.isort]
 
 profile = "black"
-known_first_party = ["ml", "tests"]
+known_first_party = ["stretch", "tests"]
 forced_separate = ["tests"]
 combine_as_imports = true
 
@@ -20,14 +20,6 @@ testpaths = ["tests"]
 [tool.pylint.general]
 
 jobs = 2
-
-extension-pkg-allow-list = [
-    "cv2",
-    "ml.cpp",
-    "numpy",
-    "pandas",
-    "torch",
-]
 
 [tool.pylint.basic]
 
@@ -87,6 +79,7 @@ module = [
     "ffmpeg.*",
     "pytest.*",
     "setuptools.*",
+    "aiortc.*",
 ]
 
 ignore_missing_imports = true

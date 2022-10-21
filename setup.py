@@ -6,7 +6,7 @@ with open("README.md", "r", encoding="utf-8") as f:
     long_description = f.read()
 
 setup(
-    name="ml",
+    name="stretch",
     version="0.0.1",
     description="Stretch robot project",
     author="Benjamin Bolte",
