@@ -13,8 +13,8 @@ conda create --name stretch python=3.8
 2. Install pre-requisites:
 
 ```bash
-# Make sure `librealsense` is installed
-brew install librealsense  # On Mac
+# Make sure certain C++ dependencies are installed
+brew install gcc-12
 
 # Required installation tools
 conda install -c conda-forge ffmpeg cmake
@@ -23,13 +23,13 @@ conda install -c conda-forge ffmpeg cmake
 conda install cmake-format clang-format
 ```
 
-3. Install the package:
+4. Install the package:
 
 ```bash
 make install
 ```
 
-4. Run the bot:
+5. Run the bot:
 
 ```bash
 bot

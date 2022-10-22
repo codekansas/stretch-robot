@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import sysconfig
 from pathlib import Path
+from typing import List
 
 from setuptools import Extension, setup
 from setuptools.command.build_ext import build_ext
@@ -24,9 +25,7 @@ class CMakeExtension(Extension):
 class CMakeBuild(build_ext):
     """Defines a build command for CMake projects."""
 
-    cmake_prefix_path: str
-    cmake_cxx_flags: str
-    python_path: str
+    cmake_args: List[str]
 
     def run(self) -> None:
         import pybind11  # pylint: disable=import-error
@@ -51,14 +50,26 @@ class CMakeBuild(build_ext):
             cmake_include_dirs += [python_include_path]
         cmake_cxx_flags += [f"-isystem {dir_name}" for dir_name in cmake_include_dirs]
 
-        # Sets paths to various CMake stuff.
-        self.cmake_prefix_path = ";".join([pybind11.get_cmake_dir()])
-        self.cmake_cxx_flags = " ".join(cmake_cxx_flags)
+        # Gets the CMake prefix path.
+        cmake_prefix_path = ";".join([pybind11.get_cmake_dir()])
 
         # Gets the path to the Python installation.
         if not (python_path := shutil.which("python")):
             raise RuntimeError("Python path not found")
-        self.python_path = python_path
+
+        self.cmake_args = [
+            f"-DCMAKE_PREFIX_PATH={cmake_prefix_path}",
+            f"-DCMAKE_CXX_FLAGS='{' '.join(cmake_cxx_flags)}'",
+            f"-DPYTHON_EXECUTABLE:FILEPATH={python_path}",
+        ]
+
+        # if system == "Darwin":
+        #     assert (gcc_12_path := shutil.which("gcc-12")) is not None, "gcc-12 installation required"
+        #     assert (gpp_12_path := shutil.which("g++-12")) is not None, "g++-12 installation required"
+        #     self.cmake_args += [
+        #         f"-DCMAKE_C_COMPILER={gcc_12_path}",
+        #         f"-DCMAKE_CXX_COMPILER={gpp_12_path}",
+        #     ]
 
         for ext in self.extensions:
             assert isinstance(ext, CMakeExtension)
@@ -67,12 +78,9 @@ class CMakeBuild(build_ext):
     def build_cmake(self, ext: CMakeExtension) -> None:
         config = "Debug" if self.debug else "Release"
 
-        cmake_args = [
+        cmake_args = self.cmake_args + [
             f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={os.path.abspath(ext.name)}",
-            f"-DCMAKE_PREFIX_PATH={self.cmake_prefix_path}",
-            f"-DPYTHON_EXECUTABLE:FILEPATH={self.python_path}",
             f"-DCMAKE_BUILD_TYPE={config}",
-            f"-DCMAKE_CXX_FLAGS='{self.cmake_cxx_flags}'",
         ]
 
         env = os.environ.copy()

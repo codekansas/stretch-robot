@@ -1,0 +1,3 @@
+[submodule "stretch/cpp/realsense/third_party/librealsense"]
+	path = stretch/cpp/realsense/third_party/librealsense
+	url = https://github.com/IntelRealSense/librealsense.git

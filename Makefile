@@ -17,7 +17,7 @@ install:
 .PHONY: install
 
 clean:
-	rm -rf build/ **/*.egg-info **/*.pyc **/*.so ml/**/*.pyi ml/**/*.so
+	rm -rf build/ **/*.egg-info **/*.pyc **/*.so stretch/**/*.pyi stretch/**/*.so
 .PHONY: clean
 
 # ---------------

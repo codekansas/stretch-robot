@@ -38,7 +38,6 @@ jobs:
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
           conda install -c conda-forge \
-            librealsense \
             ffmpeg \
             cmake \
             cmake-format \
