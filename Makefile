@@ -25,8 +25,12 @@ clean:
 # ---------------
 
 py-files := $$(git ls-files '*.py')
+cpp-files := $$(git ls-files '*.c' '*.cpp' '*.h' '*.hpp' '*.cu' '*.cuh')
+cmake-files := $$(git ls-files '*/CMakeLists.txt')
 
 format:
+	cmake-format -i $(cmake-files)
+	clang-format -i $(cpp-files)
 	black $(py-files)
 	isort $(py-files)
 .PHONY: format

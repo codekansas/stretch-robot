@@ -17,9 +17,18 @@ combine_as_imports = true
 addopts = "-rx -rf -x -q --full-trace"
 testpaths = ["tests"]
 
+markers = [
+    "realsense: Marks test as requiring a RealSense device to be available",
+]
+
 [tool.pylint.general]
 
 jobs = 2
+
+# Don't typecheck against these.
+extension-pkg-allow-list = [
+    "stretch.cpp",
+]
 
 [tool.pylint.basic]
 

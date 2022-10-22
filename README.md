@@ -7,13 +7,20 @@ Stretch robot control code
 1. Create a Conda environment:
 
 ```bash
-conda create --name stretch python=3.10
+conda create --name stretch python=3.8
 ```
 
-2. Install dependencies:
+2. Install pre-requisites:
 
 ```bash
-make install-dependencies
+# Make sure `librealsense` is installed
+brew install librealsense  # On Mac
+
+# Required installation tools
+conda install -c conda-forge ffmpeg cmake
+
+# Code formatting tools
+conda install cmake-format clang-format
 ```
 
 3. Install the package:

@@ -26,12 +26,6 @@ def get_media_player() -> MediaPlayer:
     raise NotImplementedError(f"Webcam not supported for {system=}")
 
 
-def get_video_stream() -> MediaStreamTrack:
-    relay = MediaRelay()
-    webcam = get_media_player()
-    return relay.subscribe(webcam.video)
-
-
 def colorize_connection_state(state: str) -> str:
     if state == "failed":
         return colorize(state, "red")
@@ -40,12 +34,17 @@ def colorize_connection_state(state: str) -> str:
     return colorize(state, "blue")
 
 
-class Camera:
+class CameraRTC:
     def __init__(self) -> None:
         self.pcs: Set[RTCPeerConnection] = set()
 
     def log_peer_count(self) -> None:
         logger.info("Number of peers: %s", colorize(str(len(self.pcs)), "green"))
+
+    def get_video_stream(self) -> MediaStreamTrack:
+        relay = MediaRelay()
+        webcam = get_media_player()
+        return relay.subscribe(webcam.video)
 
     async def offer(self, request: web.Request) -> web.Response:
         params = await request.json()
@@ -63,7 +62,7 @@ class Camera:
                 self.pcs.discard(pc)
                 self.log_peer_count()
 
-        pc.addTrack(get_video_stream())
+        pc.addTrack(self.get_video_stream())
         await pc.setRemoteDescription(desc)
         answer = await pc.createAnswer()
         await pc.setLocalDescription(answer)
@@ -94,6 +93,6 @@ def serve_camera(app: web.Application) -> None:
     # Don't long random aio stuff.
     logging.getLogger("aioice").setLevel(logging.WARNING)
 
-    camera = Camera()
+    camera = CameraRTC()
     app.on_shutdown.append(camera.on_shutdown)
     app.router.add_post("/offer", camera.offer)
