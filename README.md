@@ -9,7 +9,7 @@ Stretch robot control code
 1. Create a Conda environment:
 
 ```bash
-conda create --name stretch python=3.8
+conda create --name stretch python=3.10
 ```
 
 2. Install pre-requisites:
