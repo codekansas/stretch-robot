@@ -6,30 +6,9 @@ list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/third_party)
 # Gets all source files.
 file(GLOB_RECURSE SRC_FILES *.c *.cpp)
 
-find_library(ATOMIC_LIBRARY NAMES atomic libatomic latomic)
-
-# RealSense external repository.
-include(ExternalProject)
-ExternalProject_Add(
-  realsense2
-  GIT_REPOSITORY "git@github.com:IntelRealSense/librealsense.git"
-  GIT_TAG master
-  UPDATE_COMMAND ""
-  INSTALL_COMMAND ""
-  CMAKE_ARGS -DCMAKE_OSX_ARCHITECTURES=arm64
-             -DCMAKE_THREAD_LIBS_INIT=-lpthread
-             -DCMAKE_BUILD_TYPE=RELEASE
-             -DBUILD_NETWORK_DEVICE=OFF
-             -DBUILD_SHARED_LIBS=ON
-             -DBUILD_EXAMPLES=OFF
-             -DBUILD_WITH_OPENMP=OFF
-             -DHWM_OVER_XU=OFF
-             -DCMAKE_C_STANDARD=11
-             -DCMAKE_CXX_STANDARD=11
-             -DCMAKE_CXX_STANDARD_REQUIRED=TRUE)
-
 find_package(PythonLibs REQUIRED)
 find_package(pybind11 REQUIRED)
+find_package(realsense2 REQUIRED)
 
 # Links relevant directories.
 link_directories(${TORCH_INSTALL_PREFIX}/lib)
@@ -38,7 +17,6 @@ if(DEFINED ENV{CONDA_PREFIX})
 endif()
 
 add_library(${LIBRARY_NAME} SHARED ${SRC_FILES})
-add_dependencies(${LIBRARY_NAME} realsense2)
 
 # Sets shared library properties.
 set_target_properties(${LIBRARY_NAME} PROPERTIES LIBRARY_OUTPUT_DIRECTORY

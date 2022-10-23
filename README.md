@@ -4,6 +4,8 @@ Stretch robot control code
 
 ## Getting Started
 
+> These instructions have only been successfully tested on a Linux machine. They were also tested on a Mac M1 machine, but support for `librealsense` on non-X86 devices is pretty bad at the moment.
+
 1. Create a Conda environment:
 
 ```bash
@@ -13,11 +15,8 @@ conda create --name stretch python=3.8
 2. Install pre-requisites:
 
 ```bash
-# Make sure certain C++ dependencies are installed
-brew install gcc-12
-
 # Required installation tools
-conda install -c conda-forge ffmpeg cmake
+conda install -c conda-forge ffmpeg cmake librealsense
 
 # Code formatting tools
 conda install cmake-format clang-format

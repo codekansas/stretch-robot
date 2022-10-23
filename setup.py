@@ -63,14 +63,6 @@ class CMakeBuild(build_ext):
             f"-DPYTHON_EXECUTABLE:FILEPATH={python_path}",
         ]
 
-        # if system == "Darwin":
-        #     assert (gcc_12_path := shutil.which("gcc-12")) is not None, "gcc-12 installation required"
-        #     assert (gpp_12_path := shutil.which("g++-12")) is not None, "g++-12 installation required"
-        #     self.cmake_args += [
-        #         f"-DCMAKE_C_COMPILER={gcc_12_path}",
-        #         f"-DCMAKE_CXX_COMPILER={gpp_12_path}",
-        #     ]
-
         for ext in self.extensions:
             assert isinstance(ext, CMakeExtension)
             self.build_cmake(ext)

@@ -40,6 +40,7 @@ jobs:
           conda install -c conda-forge \
             ffmpeg \
             cmake \
+            librealsense \
             cmake-format \
             clang-format
           make install
