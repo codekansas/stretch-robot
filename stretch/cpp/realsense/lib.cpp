@@ -12,7 +12,7 @@ class VideoFrame {
     rs2::video_frame rs_frame;
 
    public:
-    VideoFrame(const rs2::video_frame& rs_frame) : rs_frame(std::move(rs_frame)) {}
+    VideoFrame(rs2::video_frame rs_frame) : rs_frame(std::forward<rs2::video_frame>(rs_frame)) {}
 
     const uint8_t* data() const { return (uint8_t*)rs_frame.get_data(); }
     const int rows() const { return std::max(rs_frame.get_height(), 0); }
@@ -25,7 +25,7 @@ class DepthFrame {
     rs2::depth_frame rs_frame;
 
    public:
-    DepthFrame(const rs2::depth_frame& rs_frame) : rs_frame(std::move(rs_frame)) {}
+    DepthFrame(rs2::depth_frame rs_frame) : rs_frame(std::forward<rs2::depth_frame>(rs_frame)) {}
 
     const uint8_t* data() const { return (uint8_t*)rs_frame.get_data(); }
     const int rows() const { return std::max(rs_frame.get_height(), 0); }
@@ -39,7 +39,7 @@ class PoseData {
     rs2_pose rs_pose;
 
    public:
-    PoseData(const rs2_pose& rs_pose) : rs_pose(std::move(rs_pose)) {}
+    PoseData(rs2_pose rs_pose) : rs_pose(std::forward<rs2_pose>(rs_pose)) {}
 
     const uint mapper_confidence() { return rs_pose.mapper_confidence; }
     const uint tracker_confidence() { return rs_pose.tracker_confidence; }
@@ -55,26 +55,22 @@ class PoseFrame {
    public:
     rs2::pose_frame rs_frame;
 
-    PoseFrame(const rs2::pose_frame& rs_frame) : rs_frame(std::move(rs_frame)) {}
+    PoseFrame(rs2::pose_frame rs_frame) : rs_frame(std::forward<rs2::pose_frame>(rs_frame)) {}
 
-    const PoseData data() { return {rs_frame.get_pose_data()}; }
+    PoseData data() { return {rs_frame.get_pose_data()}; }
 };
 
 class Frame {
    public:
-    VideoFrame rgb;
-    DepthFrame depth;
-    PoseFrame pose;
-    unsigned long long frame_number;
-    double timestamp;
+    rs2::frameset rs_frames;
 
-    Frame(const VideoFrame& rgb, const DepthFrame& depth, const PoseFrame& pose, const unsigned long long& frame_number,
-          const double& timestamp)
-        : rgb(std::move(rgb)),
-          depth(std::move(depth)),
-          pose(std::move(pose)),
-          frame_number(std::move(frame_number)),
-          timestamp(std::move(timestamp)) {}
+    Frame(rs2::frameset rs_frames) : rs_frames(std::forward<rs2::frameset>(rs_frames)) {}
+
+    VideoFrame rgb() const { return {rs_frames.get_color_frame()}; }
+    DepthFrame depth() const { return {rs_frames.get_depth_frame()}; }
+    PoseFrame pose() const { return {rs_frames.get_pose_frame()}; }
+    unsigned long long frame_number() const { return rs_frames.get_frame_number(); }
+    double timestamp() const { return rs_frames.get_timestamp(); }
 };
 
 class FrameGenerator {
@@ -98,16 +94,29 @@ class FrameGenerator {
         if (this->pipe == nullptr)
             throw std::runtime_error("`pipe` hasn't been initialized; must call `__iter__` first");
         rs2::frameset frames = this->pipe->wait_for_frames();
-        // Fisheye frame seems to be missing on our RealSense cameras.
-        // VideoFrame fisheye_frame(frames.get_fisheye_frame());
-        VideoFrame video_frame(frames.get_color_frame());
-        DepthFrame depth_frame(frames.get_depth_frame());
-        PoseFrame pose_frame(frames.get_pose_frame());
-        Frame* frame =
-            new Frame(video_frame, depth_frame, pose_frame, frames.get_frame_number(), frames.get_timestamp());
+        Frame* frame = new Frame(frames);
         return frame;
     }
 };
+
+void test() {
+    rs2::pipeline pipe;
+    pipe.start();
+
+    // This is strangely slow. Probably need to take a closer look at this:
+    // https://github.com/IntelRealSense/librealsense/wiki/Frame-Buffering-Management-in-RealSense-SDK-2.0
+
+    // Gets the first frame.
+    auto first_frame = pipe.wait_for_frames();
+    auto start_timestamp = first_frame.get_timestamp();
+
+    for (size_t i = 0; i < 1000; i++) {
+        auto frame = pipe.wait_for_frames();
+        auto timestamp = (frame.get_timestamp() - start_timestamp) / 1000.0;
+        std::cout << "frame " << i << ": fps=" << (i + 1) / timestamp << ", size=" << frame.size() << "\n";
+    }
+    std::cout << "Done.\n";
+}
 
 PYBIND11_MODULE(lib, m) {
     m.def("device_count", &device_count);
@@ -163,16 +172,18 @@ PYBIND11_MODULE(lib, m) {
     pybind11::class_<PoseFrame>(m, "PoseFrame").def_property_readonly("data", &PoseFrame::data);
 
     pybind11::class_<Frame>(m, "Frame")
-        .def_readonly("rgb", &Frame::rgb)
-        .def_readonly("depth", &Frame::depth)
-        .def_readonly("pose", &Frame::pose)
-        .def_readonly("frame_number", &Frame::frame_number)
-        .def_readonly("timestamp", &Frame::timestamp);
+        .def_property_readonly("rgb", &Frame::rgb)
+        .def_property_readonly("depth", &Frame::depth)
+        .def_property_readonly("pose", &Frame::pose)
+        .def_property_readonly("frame_number", &Frame::frame_number)
+        .def_property_readonly("timestamp", &Frame::timestamp);
 
     pybind11::class_<FrameGenerator>(m, "FrameGenerator")
         .def(pybind11::init<>())
         .def("__iter__", &FrameGenerator::iter)
         .def("__next__", &FrameGenerator::next);
+
+    m.def("test", &test);
 }
 
 }  // namespace stretch::realsense

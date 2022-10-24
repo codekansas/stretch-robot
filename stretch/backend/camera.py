@@ -13,7 +13,7 @@ from stretch.utils.colors import colorize
 logger = logging.getLogger(__name__)
 
 
-def get_media_player() -> MediaPlayer:
+def get_camera_media_player() -> MediaPlayer:
     system = platform.system()
     options = {"framerate": "30", "video_size": "640x480"}
 
@@ -21,7 +21,7 @@ def get_media_player() -> MediaPlayer:
         return MediaPlayer("default:none", format="avfoundation", options=options)
 
     if system == "Linux":
-        return MediaPlayer("/dev/video0", format="v4l2", options=options)
+        return MediaPlayer("/dev/video4", format="v4l2", options=options)
 
     raise NotImplementedError(f"Webcam not supported for {system=}")
 
@@ -41,10 +41,8 @@ class CameraRTC:
     def log_peer_count(self) -> None:
         logger.info("Number of peers: %s", colorize(str(len(self.pcs)), "green"))
 
-    def get_video_stream(self) -> MediaStreamTrack:
-        relay = MediaRelay()
-        webcam = get_media_player()
-        return relay.subscribe(webcam.video)
+    def get_media_stream_track(self) -> MediaStreamTrack:
+        return get_camera_media_player().video
 
     async def offer(self, request: web.Request) -> web.Response:
         params = await request.json()
@@ -62,7 +60,10 @@ class CameraRTC:
                 self.pcs.discard(pc)
                 self.log_peer_count()
 
-        pc.addTrack(self.get_video_stream())
+        relay = MediaRelay()
+        camera = self.get_media_stream_track()
+        track = relay.subscribe(camera)
+        pc.addTrack(track)
         await pc.setRemoteDescription(desc)
         answer = await pc.createAnswer()
         await pc.setLocalDescription(answer)
@@ -95,4 +96,4 @@ def serve_camera(app: web.Application) -> None:
 
     camera = CameraRTC()
     app.on_shutdown.append(camera.on_shutdown)
-    app.router.add_post("/offer", camera.offer)
+    app.router.add_post("/camera/offer", camera.offer)

@@ -28,6 +28,7 @@ jobs = 2
 # Don't typecheck against these.
 extension-pkg-allow-list = [
     "stretch.cpp",
+    "av",
 ]
 
 [tool.pylint.basic]

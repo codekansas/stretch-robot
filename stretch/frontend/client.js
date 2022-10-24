@@ -1,6 +1,6 @@
 var pc = null;
 
-function negotiate() {
+function negotiate(backend) {
   pc.addTransceiver("video", { direction: "recvonly" });
 
   return pc
@@ -26,7 +26,7 @@ function negotiate() {
     })
     .then(function () {
       var offer = pc.localDescription;
-      return fetch("/offer", {
+      return fetch("/" + backend + "/offer", {
         body: JSON.stringify({
           sdp: offer.sdp,
           type: offer.type,
@@ -49,7 +49,7 @@ function negotiate() {
     });
 }
 
-function start() {
+function start(backend) {
   var config = {
     sdpSemantics: "unified-plan",
     iceServers: [{ urls: ["stun:stun.l.google.com:19302"] }],
@@ -60,16 +60,16 @@ function start() {
   // Connect video stream.
   pc.addEventListener("track", function (evt) {
     if (evt.track.kind == "video") {
-      document.getElementById("video").srcObject = evt.streams[0];
+      document.getElementById("video-" + backend).srcObject = evt.streams[0];
     }
   });
 
   document.getElementById("start").disabled = true;
-  negotiate();
+  negotiate(backend);
   document.getElementById("stop").disabled = false;
 }
 
-function stop() {
+function stop(backend) {
   document.getElementById("stop").disabled = true;
 
   setTimeout(function () {

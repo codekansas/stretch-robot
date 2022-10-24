@@ -9,6 +9,7 @@ from typing import Tuple
 from aiohttp import web
 
 from stretch.backend.camera import serve_camera
+from stretch.backend.realsense import serve_realsense_camera
 from stretch.frontend.page import serve_frontend
 from stretch.utils.colors import colorize
 
@@ -51,6 +52,7 @@ def serve() -> None:
     """Serves the frontend website."""
 
     app = web.Application()
+    serve_realsense_camera(app)
     serve_camera(app)
     serve_frontend(app)
     host, port = get_addr_and_port()
