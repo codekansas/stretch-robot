@@ -128,6 +128,8 @@ setup(
     install_requires=[
         "aiohttp",
         "aiortc",
+        "numpy",
+        "Pillow",
     ],
     python_requires=">=3.8",
     extras_require={
