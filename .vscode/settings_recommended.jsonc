@@ -1,0 +1,15 @@
+{
+  "python.defaultInterpreterPath": "${env:CMAKE_PREFIX}/bin/python",
+
+  "cmake.cmakePath": "${env:CMAKE_PREFIX}/bin/cmake",
+  "cmake.configureSettings": {
+    "CMAKE_PREFIX_PATH": [
+      "${env:CMAKE_PREFIX}/lib/python3.10/site-packages/pybind11/share/cmake/pybind11"
+    ],
+    "TORCH_CUDA_ARCH_LIST": "'3.7;5.0;6.0;7.0;7.5;8.0;8.6'"
+  },
+
+  /* If using a workspace, these should go in workspace settings. */
+  "cmakeFormat.exePath": "${env:CMAKE_PREFIX}/bin/cmake-format",
+  "clang-format.executable": "${env:CMAKE_PREFIX}/bin/clang-format"
+}
