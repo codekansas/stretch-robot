@@ -2,11 +2,12 @@ import asyncio
 import json
 import logging
 import platform
-from typing import Set
+from typing import Optional, Set
 
 from aiohttp import web
 from aiortc import RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.media import MediaPlayer, MediaRelay, MediaStreamTrack
+from aiortc.rtcrtpsender import RTCRtpSender
 
 from stretch.utils.colors import colorize
 
@@ -35,8 +36,9 @@ def colorize_connection_state(state: str) -> str:
 
 
 class CameraRTC:
-    def __init__(self) -> None:
+    def __init__(self, force_codec: Optional[str] = None) -> None:
         self.pcs: Set[RTCPeerConnection] = set()
+        self.force_codec = force_codec
 
     def log_peer_count(self) -> None:
         logger.info("Number of peers: %s", colorize(str(len(self.pcs)), "green"))
@@ -63,7 +65,17 @@ class CameraRTC:
         relay = MediaRelay()
         camera = self.get_media_stream_track()
         track = relay.subscribe(camera)
-        pc.addTrack(track)
+        sender = pc.addTrack(track)
+
+        if self.force_codec is not None:
+            codecs = RTCRtpSender.getCapabilities("video").codecs
+            transceiver = next(t for t in pc.getTransceivers() if t.sender == sender)
+            codecs = [codec for codec in codecs if codec.mimeType == self.force_codec]
+            if not codecs:
+                choices = {c.mimeType for c in codecs}
+                raise ValueError(f"No codecs found for {self.force_codec}. Choices are {choices}")
+            transceiver.setCodecPreferences(codecs)
+
         await pc.setRemoteDescription(desc)
         answer = await pc.createAnswer()
         await pc.setLocalDescription(answer)

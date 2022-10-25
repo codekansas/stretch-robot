@@ -25,6 +25,7 @@ class ColorFrame {
         rs2_error* e = 0;
         frame = rs2_extract_frame(frames, frame_id, &e);
         check_error(e);
+        rs2_keep_frame(frame);
     }
 
     ~ColorFrame() { rs2_release_frame(frame); }
@@ -50,7 +51,7 @@ class ColorFrame {
         return frame_height;
     }
 
-    const int bytes_per_pixel() const { return 3; }
+    const int bytes_per_pixel() const { return 2; }
 
     const unsigned long long frame_number() const {
         rs2_error* e = 0;
@@ -102,12 +103,12 @@ class ColorFrameGenerator {
         check_error(e);
         config = rs2_create_config(&e);
         check_error(e);
-        rs2_config_enable_stream(config, RS2_STREAM_COLOR, 0, /* width */ 640, /* height */ 480, RS2_FORMAT_RGB8,
+        rs2_config_enable_stream(config, RS2_STREAM_COLOR, 0, /* width */ 640, /* height */ 480, RS2_FORMAT_YUYV,
                                  /* fps */ 30, &e);
         check_error(e);
         pipeline_profile = rs2_pipeline_start_with_config(pipeline, config, &e);
         check_error(e);
-        frames = rs2_pipeline_wait_for_frames(pipeline, RS2_DEFAULT_TIMEOUT, &e);
+        frames = rs2_pipeline_wait_for_frames(pipeline, 1000 /* RS2_DEFAULT_TIMEOUT */, &e);
         check_error(e);
         num_frames = rs2_embedded_frames_count(frames, &e);
         check_error(e);
@@ -118,7 +119,6 @@ class ColorFrameGenerator {
 
     ~ColorFrameGenerator() {
         rs2_error* e = 0;
-        rs2_release_frame(frame);
         rs2_release_frame(frames);
         rs2_pipeline_stop(pipeline, &e);
         check_error(e);
@@ -133,16 +133,16 @@ class ColorFrameGenerator {
     const ColorFrameGenerator* iter() { return this; }
 
     const ColorFrame* next() {
-        rs2_release_frame(frame);
         rs2_error* e = 0;
-        while (frame_id >= num_frames) {
+        if (frame_id >= num_frames) {
             rs2_release_frame(frames);
-            frames = rs2_pipeline_wait_for_frames(pipeline, RS2_DEFAULT_TIMEOUT, &e);
+            frames = rs2_pipeline_wait_for_frames(pipeline, 1000 /* RS2_DEFAULT_TIMEOUT */, &e);
             check_error(e);
             num_frames = rs2_embedded_frames_count(frames, &e);
             check_error(e);
             frame_id = 0;
         }
+        if (frame_id >= num_frames) throw std::runtime_error("This should never happen");
         return new ColorFrame(frames, frame_id++);
     }
 };
