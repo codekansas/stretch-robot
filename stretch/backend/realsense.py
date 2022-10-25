@@ -34,7 +34,7 @@ def worker(
         if start_time is None:
             start_time, cur_time = frame.frame_timestamp, 0.0
         else:
-            cur_time = (frame.frame_timestamp - start_time) / 960
+            cur_time = (frame.frame_timestamp - start_time) / 999
 
         av_frame.pts = int(cur_time / TIME_BASE)
         av_frame.time_base = TIME_BASE

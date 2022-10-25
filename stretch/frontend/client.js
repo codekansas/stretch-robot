@@ -26,7 +26,7 @@ function negotiate() {
     })
     .then(function () {
       var offer = pc.localDescription;
-      return fetch("/realsense/offer", {
+      return fetch("/camera/offer", {
         body: JSON.stringify({
           sdp: offer.sdp,
           type: offer.type,
