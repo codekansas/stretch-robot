@@ -10,10 +10,9 @@ from aiohttp import web
 from aiortc.contrib.media import MediaStreamError, MediaStreamTrack
 from av import VideoFrame
 from av.frame import Frame
-from PIL import Image
 
 from stretch.backend.camera import CameraRTC
-from stretch.cpp.realsense.lib import FrameGenerator
+from stretch.cpp.realsense.lib import ColorFrameGenerator
 from stretch.utils.logging import configure_logging
 from stretch.utils.video import write_animation
 
@@ -27,30 +26,42 @@ def worker(
     queue: asyncio.Queue[Optional[Frame]],
     quit_event: threading.Event,
 ) -> None:
-    generator = FrameGenerator()
     start_time: Optional[float] = None
 
-    for frame in generator:
-        arr = np.array(frame.rgb, copy=False)
-        img = Image.fromarray(arr)
-        av_frame = VideoFrame.from_image(img)
-        if start_time is None:
-            start_time, cur_time = frame.timestamp, 0.0
-        else:
-            cur_time = (frame.timestamp - start_time) / 1000
+    for frame in ColorFrameGenerator():
+        arr = np.array(frame, copy=True)
+        try:
+            av_frame = VideoFrame.from_ndarray(arr)
+        except IndexError:
+            continue
 
+        if start_time is None:
+            start_time, cur_time = frame.frame_timestamp, 0.0
+        else:
+            cur_time = (frame.frame_timestamp - start_time) / 1000
+        if cur_time < 0:
+            continue
+
+        # av_frame.index = frame.frame_number
+        # av_frame.key_frame = True
         av_frame.pts = int(cur_time / TIME_BASE)
         av_frame.time_base = TIME_BASE
+        av_frame.pict_type = "I"
 
         print(
-            "av thing",
+            "realsense",
             av_frame.height,
             av_frame.width,
+            av_frame.dts,
             av_frame.pts,
             av_frame.time_base,
             av_frame.time,
-            "fps:",
-            frame.frame_number / max(av_frame.time, 1),
+            av_frame.pict_type,
+            av_frame.interlaced_frame,
+            av_frame.key_frame,
+            av_frame.index,
+            av_frame.is_corrupt,
+            frame.frame_number,
         )
 
         asyncio.run_coroutine_threadsafe(queue.put(av_frame), loop)
@@ -121,7 +132,7 @@ def serve_realsense_camera(app: web.Application) -> None:
 
     camera = RealSenseRTC()
     app.on_shutdown.append(camera.on_shutdown)
-    app.router.add_post("/offer", camera.offer)
+    app.router.add_post("/realsense/offer", camera.offer)
 
 
 async def test_realsense_recording(total_frames: int = 100) -> None:

@@ -1,6 +1,6 @@
 var pc = null;
 
-function negotiate(backend) {
+function negotiate() {
   pc.addTransceiver("video", { direction: "recvonly" });
 
   return pc
@@ -26,7 +26,7 @@ function negotiate(backend) {
     })
     .then(function () {
       var offer = pc.localDescription;
-      return fetch("/" + backend + "/offer", {
+      return fetch("/realsense/offer", {
         body: JSON.stringify({
           sdp: offer.sdp,
           type: offer.type,
@@ -49,7 +49,7 @@ function negotiate(backend) {
     });
 }
 
-function start(backend) {
+function start() {
   var config = {
     sdpSemantics: "unified-plan",
     iceServers: [{ urls: ["stun:stun.l.google.com:19302"] }],
@@ -60,16 +60,16 @@ function start(backend) {
   // Connect video stream.
   pc.addEventListener("track", function (evt) {
     if (evt.track.kind == "video") {
-      document.getElementById("video-" + backend).srcObject = evt.streams[0];
+      document.getElementById("video").srcObject = evt.streams[0];
     }
   });
 
   document.getElementById("start").disabled = true;
-  negotiate(backend);
+  negotiate();
   document.getElementById("stop").disabled = false;
 }
 
-function stop(backend) {
+function stop() {
   document.getElementById("stop").disabled = true;
 
   setTimeout(function () {
@@ -77,5 +77,3 @@ function stop(backend) {
     document.getElementById("start").disabled = false;
   }, 500);
 }
-
-window.onunload = stop();
