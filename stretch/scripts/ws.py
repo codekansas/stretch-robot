@@ -14,6 +14,7 @@ async def hello(websocket) -> None:
 
 
 async def ws_main() -> None:
+    # Something like this: https://stackoverflow.com/questions/71895250/how-to-stream-multiple-videos-in-fastapi
     async with websockets.serve(hello, "0.0.0.0", 8765):
         await asyncio.Future()  # run forever
 
