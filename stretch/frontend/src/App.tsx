@@ -1,11 +1,13 @@
 import Container from "react-bootstrap/Container";
 import "./App.css";
-import Camera from "./components/Camera";
+import CameraFrames from "./components/CameraFrames";
+import CameraWebSocket from "./components/CameraWebSocket";
 
 const App = () => (
   <div className="App">
     <Container className="p-3 mb-3">
-      <Camera />
+      <CameraFrames />
+      <CameraWebSocket />
     </Container>
   </div>
 );

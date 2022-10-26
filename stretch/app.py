@@ -1,67 +1,40 @@
 from __future__ import annotations
 
 import logging
-import os
-import socket
-import ssl
-from typing import Tuple
+from pathlib import Path
 
-from aiohttp import web
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
-from stretch.backend.camera import serve_camera
-from stretch.backend.realsense import serve_realsense_camera
-from stretch.frontend.page import serve_frontend
-from stretch.utils.colors import colorize
+from stretch.backend.camera import router as camera_router
 
 logger = logging.getLogger(__name__)
 
+FRONTEND_ROOT = Path(__file__).parent / "frontend" / "build"
 
-def set_port(port: int) -> None:
-    port_str = str(port)
-    logger.info("Setting port to %s", colorize(port_str, "blue"))
-    os.environ["PORT"] = port_str
+if not FRONTEND_ROOT.exists():
+    raise RuntimeError("Frontend directory not found; change to `frontend` and run `npm run watch`")
 
-
-def get_addr_and_port() -> Tuple[str, int]:
-    socket_ptr = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    socket_ptr.bind(("", int(os.environ.get("PORT", "0"))))
-    addr, port = socket_ptr.getsockname()
-    socket_ptr.close()
-    logger.info("Got free port at http://%s:%s", colorize(addr, "green"), colorize(str(port), "green"))
-    return addr, port
+app = FastAPI()
+app.include_router(camera_router, prefix="/camera", tags=["camera"])
 
 
-def get_ssl_context() -> ssl.SSLContext | None:
-    cert_file = os.environ.get("SSL_CERT_FILE")
-    key_file = os.environ.get("SSL_KEY_FILE")
-
-    if cert_file is None:
-        logger.warning("SSL cert file not found")
-    if key_file is None:
-        logger.warning("SSL key file not found")
-    if cert_file is None or key_file is None:
-        return None
-
-    ssl_context = ssl.SSLContext()
-    logger.debug("Loading SSL cert file from %s and key file from %s", cert_file, key_file)
-    ssl_context.load_cert_chain(cert_file, key_file)
-    return ssl_context
+app.add_middleware(
+    CORSMiddleware,
+    # allow_origins=[f"{o.host}:{o.port}" for o in cfg.origins],
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT"],
+    allow_headers=["*"],
+)
 
 
-app = web.Application()
-serve_realsense_camera(app)
-serve_camera(app)
-serve_frontend(app)
+@app.get("/")
+async def read_index() -> FileResponse:
+    return FileResponse(FRONTEND_ROOT / "index.html")
 
 
-def serve() -> None:
-    """Serves the frontend website."""
-
-    host, port = get_addr_and_port()
-
-    web.run_app(
-        app,
-        host=host,
-        port=port,
-        ssl_context=get_ssl_context(),
-    )
+# Mounts frontend static files.
+app.mount("/", StaticFiles(directory=FRONTEND_ROOT), name="static")

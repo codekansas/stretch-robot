@@ -1,111 +1,157 @@
 import asyncio
-import json
+import errno
+import io
+import itertools
 import logging
+import math
 import platform
-from typing import Optional, Set
+from typing import AsyncIterable, Optional
 
-from aiohttp import web
-from aiortc import RTCPeerConnection, RTCSessionDescription
-from aiortc.contrib.media import MediaPlayer, MediaRelay, MediaStreamTrack
-from aiortc.rtcrtpsender import RTCRtpSender
+import av
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi.responses import StreamingResponse
 
-from stretch.utils.colors import colorize
+from stretch.utils.logging import configure_logging
 
 logger = logging.getLogger(__name__)
 
+router = r = APIRouter()
 
-def get_camera_media_player() -> MediaPlayer:
+
+async def iter_frames(
+    *,
+    framerate: int = 30,
+    width: int = 640,
+    height: int = 480,
+    pixel_format: str = "yuyv422",
+) -> AsyncIterable[av.video.frame.VideoFrame]:
     system = platform.system()
-    options = {"framerate": "30", "video_size": "640x480"}
+    assert system == "Darwin", f"Unsupported {system=}"
 
     if system == "Darwin":
-        return MediaPlayer("default:none", format="avfoundation", options=options)
+        av_fmt, av_file = "avfoundation", "default:none"
+    else:
+        raise RuntimeError(f"Unsupported {system=}")
 
-    if system == "Linux":
-        return MediaPlayer("/dev/video4", format="v4l2", options=options)
+    options = {
+        "framerate": str(framerate),
+        "video_size": f"{width}x{height}",
+        "pixel_format": pixel_format,
+    }
 
-    raise NotImplementedError(f"Webcam not supported for {system=}")
+    try:
+        container = av.open(file=av_file, format=av_fmt, mode="r", options=options, timeout=None)
+        stream = next(s for s in container.streams if s.type == "video")  # pylint: disable=stop-iteration-return
+        video_first_pts: Optional[float] = None
 
+        while True:
+            try:
+                frame = next(container.decode(stream))  # pylint: disable=stop-iteration-return
+            except av.FFmpegError as exc:
+                if exc.errno == errno.EAGAIN:
+                    await asyncio.sleep(0.01)
+                    continue
+                raise
 
-def colorize_connection_state(state: str) -> str:
-    if state == "failed":
-        return colorize(state, "red")
-    if state == "connecting":
-        return colorize(state, "yellow")
-    return colorize(state, "blue")
+            if video_first_pts is None:
+                video_first_pts = frame.pts
+            frame.pts -= video_first_pts
+            yield frame
 
+    except Exception:
+        logger.exception("Caught exception while iterating webcam frames")
 
-class CameraRTC:
-    def __init__(self, force_codec: Optional[str] = None) -> None:
-        self.pcs: Set[RTCPeerConnection] = set()
-        self.force_codec = force_codec
-
-    def log_peer_count(self) -> None:
-        logger.info("Number of peers: %s", colorize(str(len(self.pcs)), "green"))
-
-    def get_media_stream_track(self) -> MediaStreamTrack:
-        return get_camera_media_player().video
-
-    async def offer(self, request: web.Request) -> web.Response:
-        params = await request.json()
-        desc = RTCSessionDescription(sdp=params["sdp"], type=params["type"])
-
-        pc = RTCPeerConnection()
-        self.pcs.add(pc)
-        self.log_peer_count()
-
-        @pc.on("connectionstatechange")
-        async def on_state_change() -> None:
-            logger.info("Connection state changed to %s", colorize_connection_state(pc.connectionState))
-            if pc.connectionState == "failed":
-                await pc.close()
-                self.pcs.discard(pc)
-                self.log_peer_count()
-
-        relay = MediaRelay()
-        camera = self.get_media_stream_track()
-        track = relay.subscribe(camera)
-        sender = pc.addTrack(track)
-
-        if self.force_codec is not None:
-            codecs = RTCRtpSender.getCapabilities("video").codecs
-            transceiver = next(t for t in pc.getTransceivers() if t.sender == sender)
-            codecs = [codec for codec in codecs if codec.mimeType == self.force_codec]
-            if not codecs:
-                choices = {c.mimeType for c in codecs}
-                raise ValueError(f"No codecs found for {self.force_codec}. Choices are {choices}")
-            transceiver.setCodecPreferences(codecs)
-
-        await pc.setRemoteDescription(desc)
-        answer = await pc.createAnswer()
-        await pc.setLocalDescription(answer)
-
-        return web.Response(
-            content_type="application/json",
-            text=json.dumps(
-                {
-                    "sdp": pc.localDescription.sdp,
-                    "type": pc.localDescription.type,
-                },
-            ),
-        )
-
-    async def on_shutdown(self, app: web.Application) -> None:  # pylint: disable=unused-argument
-        await asyncio.gather(*[pc.close() for pc in self.pcs])
-        self.pcs.clear()
-        self.log_peer_count()
+    finally:
+        container.close()
 
 
-def serve_camera(app: web.Application) -> None:
-    """Serves the webcam over RTC.
+async def stream_jpeg_frames() -> AsyncIterable[bytes]:
+    start_bytes = b"--frame\r\n" b"Content-Type: image/jpeg\r\n\r\n"
+    end_bytes = b"\r\n"
+    buffer = io.BytesIO()
+    async for frame in iter_frames():
+        img = frame.to_image()
+        img.save(buffer, format="JPEG")
+        img_bytes = buffer.getvalue()
+        buffer.seek(0)
+        yield start_bytes
+        yield img_bytes
+        yield end_bytes
+
+
+@r.get("/")
+async def get_camera_feed() -> StreamingResponse:
+    return StreamingResponse(stream_jpeg_frames(), media_type="multipart/x-mixed-replace; boundary=frame")
+
+
+async def listen_for_message(ws: WebSocket, connection_active: asyncio.Event) -> None:
+    while True:
+        message = await ws.receive()
+        if message["type"] == "websocket.disconnect":
+            connection_active.set()
+            return
+
+
+@r.websocket("/video")
+async def get_camera_video_feed(ws: WebSocket) -> None:
+    await ws.accept()
+
+    connection_active = asyncio.Event()
+    asyncio.ensure_future(listen_for_message(ws, connection_active))
+
+    buffer = io.BytesIO()
+
+    try:
+        async for frame in iter_frames():
+            img = frame.to_image()
+            img.save(buffer, format="JPEG")
+            img_bytes = buffer.getvalue()
+            buffer.seek(0)
+            if connection_active.is_set():
+                break
+            await ws.send_bytes(img_bytes)
+            await asyncio.sleep(0.01)
+
+    except WebSocketDisconnect:
+        logger.exception("Web socket is disconnected")
+
+
+async def test_iter_frames(total_seconds: float = 3.0, framerate: int = 30) -> None:
+    """Tests getting an input video stream using PyAV.
+
+    Usage:
+        python -m stretch.backend.camera
 
     Args:
-        app: The running application
+        total_seconds: The total number of seconds of video to record
+        framerate: The framerate for recording the video
     """
 
-    # Don't long random aio stuff.
-    logging.getLogger("aioice").setLevel(logging.WARNING)
+    configure_logging()
 
-    camera = CameraRTC()
-    app.on_shutdown.append(camera.on_shutdown)
-    app.router.add_post("/camera/offer", camera.offer)
+    total_frames = int(math.ceil(total_seconds * framerate))
+
+    output = av.open("output.mp4", mode="w")
+    ovstream = output.add_stream("mpeg4", framerate)
+    ovstream.pix_fmt = "yuv420p"
+    ovstream.width = 640
+    ovstream.height = 480
+
+    i = 0
+
+    async for frame in iter_frames(framerate=framerate):
+        i += 1
+        if i > total_frames:
+            break
+        logger.info("Captured frame %d / %d with shape (%d, %d)", i, total_frames, frame.height, frame.width)
+        for p in ovstream.encode(frame):
+            output.mux(p)
+
+    for p in ovstream.encode():
+        output.mux(p)
+
+    output.close()
+
+
+if __name__ == "__main__":
+    asyncio.run(test_iter_frames())
