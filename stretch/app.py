@@ -48,12 +48,22 @@ def get_ssl_context() -> ssl.SSLContext | None:
     return ssl_context
 
 
-def serve() -> None:
-    """Serves the frontend website."""
-
+async def app_factory() -> web.Application:
     app = web.Application()
     serve_realsense_camera(app)
     serve_camera(app)
     serve_frontend(app)
+    return app
+
+
+async def serve() -> None:
+    """Serves the frontend website."""
+
     host, port = get_addr_and_port()
-    web.run_app(app, host=host, port=port, ssl_context=get_ssl_context())
+
+    web.run_app(
+        await app_factory(),
+        host=host,
+        port=port,
+        ssl_context=get_ssl_context(),
+    )
