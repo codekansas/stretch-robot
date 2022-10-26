@@ -9,15 +9,9 @@ ROOT = Path(__file__).parent.resolve()
 
 
 async def index(request: web.Request) -> web.Response:  # pylint: disable=unused-argument
-    with open(ROOT / "index.html", "r", encoding="utf-8") as f:
+    with open(ROOT / "frontend" / "build" / "index.html", "r", encoding="utf-8") as f:
         content = f.read()
     return web.Response(content_type="text/html", text=content)
-
-
-async def javascript(request: web.Request) -> web.Response:  # pylint: disable=unused-argument
-    with open(ROOT / "client.js", "r", encoding="utf-8") as f:
-        content = f.read()
-    return web.Response(content_type="application/javascript", text=content)
 
 
 def serve_frontend(app: web.Application) -> None:
@@ -28,4 +22,4 @@ def serve_frontend(app: web.Application) -> None:
     """
 
     app.router.add_get("/", index)
-    app.router.add_get("/client.js", javascript)
+    app.router.add_static("/", ROOT / "frontend" / "build")

@@ -130,6 +130,7 @@ setup(
         "aiortc",
         "numpy",
         "Pillow",
+        "websockets",
     ],
     python_requires=">=3.8",
     extras_require={

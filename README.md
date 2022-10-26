@@ -28,7 +28,15 @@ conda install cmake-format clang-format
 make install
 ```
 
-5. Run the bot:
+5. Prepare frontend:
+
+```bash
+cd stretch/frontend
+nvm use 16.15.1
+npm install
+```
+
+6. Run the bot:
 
 ```bash
 bot

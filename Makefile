@@ -3,6 +3,14 @@
 all: refresh
 .PHONY: all
 
+gunicorn:
+	gunicorn \
+		stretch.app:app \
+		--bind 0.0.0.0:8080 \
+		--reload \
+		--worker-class aiohttp.GunicornWebWorker
+.PHONY: gunicorn
+
 # --------------
 # Build commands
 # --------------
