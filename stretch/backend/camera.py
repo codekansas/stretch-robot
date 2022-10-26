@@ -1,7 +1,6 @@
 import asyncio
 import errno
 import io
-import itertools
 import logging
 import math
 import platform
@@ -92,7 +91,7 @@ async def listen_for_message(ws: WebSocket, connection_active: asyncio.Event) ->
             return
 
 
-@r.websocket("/video")
+@r.websocket("/ws")
 async def get_camera_video_feed(ws: WebSocket) -> None:
     await ws.accept()
 

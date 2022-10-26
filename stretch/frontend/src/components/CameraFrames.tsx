@@ -25,7 +25,7 @@ const CameraFrames = () => {
         </Button>
       </div>
       <div className="m-1">
-        <img src={show ? "/camera/" : ""} />
+        <img src={show ? "/camera/" : ""} alt="Video stream" />
       </div>
     </>
   );

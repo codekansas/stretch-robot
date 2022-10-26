@@ -9,6 +9,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from stretch.backend.camera import router as camera_router
+from stretch.backend.ping import router as ping_router
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +20,7 @@ if not FRONTEND_ROOT.exists():
 
 app = FastAPI()
 app.include_router(camera_router, prefix="/camera", tags=["camera"])
+app.include_router(ping_router, prefix="/ping", tags=["ping"])
 
 
 app.add_middleware(
