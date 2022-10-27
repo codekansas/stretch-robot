@@ -48,8 +48,12 @@ class FrameSet {
    public:
     ColorFrame rgb;
     DepthFrame depth;
+    rs2::pose_frame pose_frame;
 
-    FrameSet(rs2::video_frame& rgb, rs2::depth_frame& depth) : rgb(rgb), depth(depth) {}
+    FrameSet(rs2::video_frame& rgb, rs2::depth_frame& depth, rs2::pose_frame& pose_frame)
+        : rgb(rgb), depth(depth), pose_frame(pose_frame) {}
+
+    const rs2_pose pose() const { return pose_frame.get_pose_data(); }
 };
 
 class FrameGenerator {
@@ -73,6 +77,7 @@ class FrameGenerator {
         // Creates a new pipeline.
         pipe = rs2::pipeline(ctx);
         rs2::config cfg;
+        cfg.enable_device(device.get_info(RS2_CAMERA_INFO_SERIAL_NUMBER));
         cfg.enable_stream(RS2_STREAM_COLOR, 0, /* width */ 640, /* height */ 480, RS2_FORMAT_YUYV, /* fps */ 30);
         cfg.enable_stream(RS2_STREAM_DEPTH, 0, /* width */ 640, /* height */ 480, RS2_FORMAT_Z16, /* fps */ 30);
         pipe.start(cfg);
@@ -84,7 +89,8 @@ class FrameGenerator {
         auto frames = pipe.wait_for_frames();
         auto color_frame = frames.get_color_frame();
         auto depth_frame = frames.get_depth_frame();
-        return new FrameSet(color_frame, depth_frame);
+        auto pose_frame = frames.get_pose_frame();
+        return new FrameSet(color_frame, depth_frame, pose_frame);
     }
 };
 
@@ -103,6 +109,16 @@ PYBIND11_MODULE(lib, m) {
         .def_readonly("x", &rs2_vector::x)
         .def_readonly("y", &rs2_vector::y)
         .def_readonly("z", &rs2_vector::z);
+
+    pybind11::class_<rs2_pose>(m, "Pose")
+        .def_readonly("translation", &rs2_pose::translation)
+        .def_readonly("velocity", &rs2_pose::velocity)
+        .def_readonly("acceleration", &rs2_pose::acceleration)
+        .def_readonly("rotation", &rs2_pose::rotation)
+        .def_readonly("angular_velocity", &rs2_pose::angular_velocity)
+        .def_readonly("angular_acceleration", &rs2_pose::angular_acceleration)
+        .def_readonly("tracker_confidence", &rs2_pose::tracker_confidence)
+        .def_readonly("mapper_confidence", &rs2_pose::mapper_confidence);
 
     pybind11::class_<ColorFrame>(m, "ColorFrame", pybind11::buffer_protocol())
         .def_buffer([](ColorFrame& m) -> pybind11::buffer_info {
@@ -135,7 +151,10 @@ PYBIND11_MODULE(lib, m) {
         .def_property_readonly("frame_timestamp", &DepthFrame::frame_timestamp)
         .def_property_readonly("units", &DepthFrame::units);
 
-    pybind11::class_<FrameSet>(m, "Frame").def_readonly("rgb", &FrameSet::rgb).def_readonly("depth", &FrameSet::depth);
+    pybind11::class_<FrameSet>(m, "Frame")
+        .def_readonly("rgb", &FrameSet::rgb)
+        .def_readonly("depth", &FrameSet::depth)
+        .def_property_readonly("pose", &FrameSet::pose);
 
     pybind11::class_<FrameGenerator>(m, "FrameGenerator")
         .def(pybind11::init<>())

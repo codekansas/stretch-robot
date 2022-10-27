@@ -23,26 +23,19 @@ logger = logging.getLogger(__name__)
 
 router = r = APIRouter()
 
-CameraType = Literal["depth", "rgb"]
-
-
-@dataclass(frozen=True)
-class Extrinsics:
-    rotation: np.ndarray
-    position: np.ndarray
+SensorType = Literal["depth", "rgb"]
 
 
 @dataclass(frozen=True)
 class Frame:
     rgb: av.video.frame.VideoFrame
     depth: av.video.frame.VideoFrame
-    extrinsics: Extrinsics
 
 
-def cast_camera_type(raw_camera_type: str) -> CameraType:
-    args = get_args(CameraType)
-    assert raw_camera_type in args, f"Invalid camera type: {raw_camera_type}"
-    return cast(CameraType, raw_camera_type)
+def cast_sensor_type(raw_sensor_type: str) -> SensorType:
+    args = get_args(SensorType)
+    assert raw_sensor_type in args, f"Invalid sensor type: {raw_sensor_type}"
+    return cast(SensorType, raw_sensor_type)
 
 
 async def iter_webcam_frames(
@@ -66,12 +59,6 @@ async def iter_webcam_frames(
         "pixel_format": pixel_format,
     }
 
-    # Use some dummy extrinsics, since the webcam doesn't have any.
-    dummy_extrinsics = Extrinsics(
-        rotation=np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]], dtype=np.float64),
-        position=np.array([0, 0, 0], dtype=np.float64),
-    )
-
     try:
         container = av.open(file=av_file, format=av_fmt, mode="r", options=options, timeout=None)
         stream = next(s for s in container.streams if s.type == "video")  # pylint: disable=stop-iteration-return
@@ -90,7 +77,7 @@ async def iter_webcam_frames(
                 video_first_pts = frame.pts
             frame.pts -= video_first_pts
 
-            yield Frame(rgb=frame, depth=frame, extrinsics=dummy_extrinsics)
+            yield Frame(rgb=frame, depth=frame)
 
     except Exception:
         logger.exception("Caught exception while iterating webcam frames")
@@ -101,12 +88,6 @@ async def iter_webcam_frames(
 
 async def iter_realsense_frames() -> AsyncIterable[Frame]:
     assert realsense_lib is not None
-
-    # Use some dummy extrinsics for now; still need to read them from device.
-    dummy_extrinsics = Extrinsics(
-        rotation=np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]], dtype=np.float64),
-        position=np.array([0, 0, 0], dtype=np.float64),
-    )
 
     for frame in realsense_lib.FrameGenerator():
         rgb_arr = np.array(frame.rgb, copy=False)
@@ -124,7 +105,6 @@ async def iter_realsense_frames() -> AsyncIterable[Frame]:
         yield Frame(
             rgb=rgb_frame,
             depth=depth_frame,
-            extrinsics=dummy_extrinsics,
         )
 
         await asyncio.sleep(0.01)
@@ -144,28 +124,28 @@ async def iter_frames() -> AsyncIterable[Frame]:
 
 class ConnectionManager:
     def __init__(self) -> None:
-        self.web_sockets: Dict[CameraType, Set[WebSocket]] = {}
+        self.web_sockets: Dict[SensorType, Set[WebSocket]] = {}
         self.started = asyncio.Event()
         self.lock = asyncio.Lock()
         self.task = asyncio.create_task(run_connection_manager(self))
 
-    async def connect(self, camera_type: CameraType, websocket: WebSocket) -> None:
+    async def connect(self, sensor_type: SensorType, websocket: WebSocket) -> None:
         await websocket.accept()
         await self.lock.acquire()
-        if camera_type in self.web_sockets:
-            self.web_sockets[camera_type].add(websocket)
+        if sensor_type in self.web_sockets:
+            self.web_sockets[sensor_type].add(websocket)
         else:
-            self.web_sockets[camera_type] = {websocket}
+            self.web_sockets[sensor_type] = {websocket}
         self.lock.release()
         if not self.started.is_set():
             logger.info("Starting camera stream")
             self.started.set()
 
-    async def disconnect(self, camera_type: CameraType, websocket: WebSocket) -> None:
+    async def disconnect(self, sensor_type: SensorType, websocket: WebSocket) -> None:
         await self.lock.acquire()
-        self.web_sockets[camera_type].remove(websocket)
-        if not self.web_sockets[camera_type]:
-            self.web_sockets.pop(camera_type)
+        self.web_sockets[sensor_type].remove(websocket)
+        if not self.web_sockets[sensor_type]:
+            self.web_sockets.pop(sensor_type)
         self.lock.release()
         if not self.web_sockets:
             logger.info("Stopping camera stream")
@@ -220,12 +200,12 @@ async def run_connection_manager(manager: ConnectionManager) -> None:
             await asyncio.sleep(0.01)
 
 
-@r.websocket("/{camera}/ws")
-async def get_camera_video_feed(ws: WebSocket, camera: str) -> None:
-    camera_type = cast_camera_type(camera)
+@r.websocket("/{sensor}/ws")
+async def get_sensor_feed(ws: WebSocket, sensor: str) -> None:
+    sensor_type = cast_sensor_type(sensor)
 
     try:
-        await ConnectionManager.get().connect(camera_type, ws)
+        await ConnectionManager.get().connect(sensor_type, ws)
 
         # Receive until the websocket is closed by the client.
         while True:
@@ -237,7 +217,7 @@ async def get_camera_video_feed(ws: WebSocket, camera: str) -> None:
         logger.exception("Web socket is disconnected")
 
     finally:
-        await ConnectionManager.get().disconnect(camera_type, ws)
+        await ConnectionManager.get().disconnect(sensor_type, ws)
 
 
 async def test_iter_frames(total_seconds: float = 3.0) -> None:
