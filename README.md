@@ -28,7 +28,15 @@ conda install cmake-format clang-format
 make install
 ```
 
-5. Run the bot:
+5. Prepare frontend:
+
+```bash
+cd stretch/frontend
+nvm use 16.15.1
+npm install
+```
+
+6. Run the bot:
 
 ```bash
 bot
@@ -40,3 +48,9 @@ bot
   - [Stretch Body](https://github.com/hello-robot/stretch_body)
   - [Stretch Firmware](https://github.com/hello-robot/stretch_firmware)
   - [Stretch ROS](https://github.com/hello-robot/stretch_ros)
+
+## TODO
+
+- RealSense camera doesn't like having multiple streams open at once. Instead, will need to use a WebSocket manager pattern
+- Need to add the depth camera in addition to the RGB camera
+- Should try to derive a good way of visualizing camera extrinsics

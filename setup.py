@@ -126,10 +126,13 @@ setup(
         "mypy",
     ],
     install_requires=[
-        "aiohttp",
-        "aiortc",
+        "av",
+        "fastapi",
+        "matplotlib",
         "numpy",
         "Pillow",
+        "uvicorn",
+        "websockets",
     ],
     python_requires=">=3.8",
     extras_require={

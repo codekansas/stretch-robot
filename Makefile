@@ -3,6 +3,10 @@
 all: refresh
 .PHONY: all
 
+uvicorn:
+	uvicorn stretch.app:app --host 0.0.0.0 --reload
+.PHONY: uvicorn
+
 # --------------
 # Build commands
 # --------------
