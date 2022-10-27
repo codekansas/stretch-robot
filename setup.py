@@ -128,6 +128,7 @@ setup(
     install_requires=[
         "av",
         "fastapi",
+        "matplotlib",
         "numpy",
         "Pillow",
         "uvicorn",

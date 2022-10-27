@@ -16,19 +16,22 @@ void check_error(rs2_error* e) {
     }
 }
 
-class ColorFrame {
+enum CameraType { rgb = 0, depth };
+
+class Frame {
    protected:
+    CameraType camera_type;
     rs2_frame* frame;
 
    public:
-    ColorFrame(rs2_frame* frames, int frame_id) {
+    Frame(rs2_frame* frames, int frame_id, CameraType camera_type) : camera_type(camera_type) {
         rs2_error* e = 0;
         frame = rs2_extract_frame(frames, frame_id, &e);
         check_error(e);
         rs2_keep_frame(frame);
     }
 
-    ~ColorFrame() { rs2_release_frame(frame); }
+    ~Frame() { rs2_release_frame(frame); }
 
     const uint8_t* data() const {
         rs2_error* e = 0;
@@ -51,7 +54,16 @@ class ColorFrame {
         return frame_height;
     }
 
-    const int bytes_per_pixel() const { return 2; }
+    const int bytes_per_pixel() const {
+        switch (camera_type) {
+            case rgb:
+                return 2;
+            case depth:
+                return 2;  // Z16 has two bytes for Z data.
+            default:
+                throw std::runtime_error("Unsupported camera type for frame");
+        }
+    }
 
     const unsigned long long frame_number() const {
         rs2_error* e = 0;
@@ -68,8 +80,9 @@ class ColorFrame {
     }
 };
 
-class ColorFrameGenerator {
+class FrameGenerator {
    private:
+    CameraType camera_type;
     size_t device_id;
     rs2_context* ctx;
     rs2_device_list* device_list;
@@ -83,7 +96,8 @@ class ColorFrameGenerator {
     int frame_id;
 
    public:
-    ColorFrameGenerator(size_t device_id = 0) : device_id(device_id), frame_id(0) {
+    FrameGenerator(CameraType camera_type, size_t device_id = 0)
+        : camera_type(camera_type), device_id(device_id), frame_id(0) {
         rs2_error* e = 0;
         ctx = rs2_create_context(RS2_API_VERSION, &e);
         check_error(e);
@@ -103,8 +117,19 @@ class ColorFrameGenerator {
         check_error(e);
         config = rs2_create_config(&e);
         check_error(e);
-        rs2_config_enable_stream(config, RS2_STREAM_COLOR, 0, /* width */ 640, /* height */ 480, RS2_FORMAT_YUYV,
-                                 /* fps */ 30, &e);
+        switch (camera_type) {
+            case rgb:
+                rs2_config_enable_stream(config, RS2_STREAM_COLOR, 0, /* width */ 640, /* height */ 480,
+                                         RS2_FORMAT_YUYV,
+                                         /* fps */ 30, &e);
+                break;
+            case depth:
+                rs2_config_enable_stream(config, RS2_STREAM_DEPTH, 0, /* width */ 640, /* height */ 480, RS2_FORMAT_Z16,
+                                         /* fps */ 30, &e);
+                break;
+            default:
+                throw std::runtime_error("Unsupported camera type");
+        }
         check_error(e);
         pipeline_profile = rs2_pipeline_start_with_config(pipeline, config, &e);
         check_error(e);
@@ -117,7 +142,7 @@ class ColorFrameGenerator {
         check_error(e);
     }
 
-    ~ColorFrameGenerator() {
+    ~FrameGenerator() {
         rs2_error* e = 0;
         rs2_release_frame(frames);
         rs2_pipeline_stop(pipeline, &e);
@@ -130,9 +155,9 @@ class ColorFrameGenerator {
         rs2_delete_context(ctx);
     }
 
-    const ColorFrameGenerator* iter() { return this; }
+    const FrameGenerator* iter() { return this; }
 
-    const ColorFrame* next() {
+    const Frame* next() {
         rs2_error* e = 0;
         if (frame_id >= num_frames) {
             rs2_release_frame(frames);
@@ -143,7 +168,7 @@ class ColorFrameGenerator {
             frame_id = 0;
         }
         if (frame_id >= num_frames) throw std::runtime_error("This should never happen");
-        return new ColorFrame(frames, frame_id++);
+        return new Frame(frames, frame_id++, camera_type);
     }
 };
 
@@ -151,6 +176,8 @@ using namespace pybind11::literals;
 
 PYBIND11_MODULE(lib, m) {
     m.def("device_count", &device_count);
+
+    pybind11::enum_<CameraType>(m, "CameraType").value("rgb", rgb).value("depth", depth).export_values();
 
     pybind11::class_<rs2_quaternion>(m, "Quaternion")
         .def_readonly("x", &rs2_quaternion::x)
@@ -163,8 +190,8 @@ PYBIND11_MODULE(lib, m) {
         .def_readonly("y", &rs2_vector::y)
         .def_readonly("z", &rs2_vector::z);
 
-    pybind11::class_<ColorFrame>(m, "ColorFrame", pybind11::buffer_protocol())
-        .def_buffer([](ColorFrame& m) -> pybind11::buffer_info {
+    pybind11::class_<Frame>(m, "Frame", pybind11::buffer_protocol())
+        .def_buffer([](Frame& m) -> pybind11::buffer_info {
             auto buf = pybind11::buffer_info(m.data(), sizeof(uint8_t), true);
             buf.format = pybind11::format_descriptor<uint8_t>::format();
             buf.ndim = 3;
@@ -172,16 +199,16 @@ PYBIND11_MODULE(lib, m) {
             buf.strides = {m.width() * m.bytes_per_pixel(), m.bytes_per_pixel(), 1};
             return buf;
         })
-        .def_property_readonly("width", &ColorFrame::width)
-        .def_property_readonly("height", &ColorFrame::height)
-        .def_property_readonly("bytes_per_pixel", &ColorFrame::bytes_per_pixel)
-        .def_property_readonly("frame_number", &ColorFrame::frame_number)
-        .def_property_readonly("frame_timestamp", &ColorFrame::frame_timestamp);
+        .def_property_readonly("width", &Frame::width)
+        .def_property_readonly("height", &Frame::height)
+        .def_property_readonly("bytes_per_pixel", &Frame::bytes_per_pixel)
+        .def_property_readonly("frame_number", &Frame::frame_number)
+        .def_property_readonly("frame_timestamp", &Frame::frame_timestamp);
 
-    pybind11::class_<ColorFrameGenerator>(m, "ColorFrameGenerator")
-        .def(pybind11::init<>())
-        .def("__iter__", &ColorFrameGenerator::iter)
-        .def("__next__", &ColorFrameGenerator::next);
+    pybind11::class_<FrameGenerator>(m, "FrameGenerator")
+        .def(pybind11::init<CameraType>(), "camera_type"_a)
+        .def("__iter__", &FrameGenerator::iter)
+        .def("__next__", &FrameGenerator::next);
 }
 
 }  // namespace stretch::realsense

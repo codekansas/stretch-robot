@@ -4,20 +4,43 @@ import io
 import logging
 import math
 import platform
-from typing import AsyncIterable, Optional
+from typing import AsyncIterable, Literal, Optional, cast, get_args
 
 import av
+import numpy as np
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
 
 from stretch.utils.logging import configure_logging
 
+try:
+    from stretch.cpp.realsense import lib as realsense_lib
+except (ImportError, ModuleNotFoundError):
+    realsense_lib = None  # type: ignore
+
 logger = logging.getLogger(__name__)
 
 router = r = APIRouter()
 
+CameraType = Literal["depth", "rgb"]
 
-async def iter_frames(
+
+def cast_camera_type(raw_camera_type: str) -> CameraType:
+    args = get_args(CameraType)
+    assert raw_camera_type in args, f"Invalid camera type: {raw_camera_type}"
+    return cast(CameraType, raw_camera_type)
+
+
+def cast_cpp_camera_type(camera_type: CameraType) -> realsense_lib.CameraType:
+    match camera_type:
+        case "rgb":
+            return realsense_lib.CameraType.rgb
+        case "depth":
+            return realsense_lib.CameraType.depth
+    raise KeyError(camera_type)
+
+
+async def iter_webcam_frames(
     *,
     framerate: int = 30,
     width: int = 640,
@@ -64,11 +87,49 @@ async def iter_frames(
         container.close()
 
 
-async def stream_jpeg_frames() -> AsyncIterable[bytes]:
+def get_camera_format(camera_type: CameraType) -> str:
+    match camera_type:
+        case "rgb":
+            return "yuyv422"
+        case "depth":
+            # After remapping colors.
+            # return "rgb24"
+            # Without remapping colors.
+            return "gray"
+    raise KeyError(camera_type)
+
+
+async def iter_realsense_frames(camera_type: CameraType) -> AsyncIterable[av.video.frame.VideoFrame]:
+    if realsense_lib is None:
+        webcam_iter = iter_webcam_frames()
+        async for frame in webcam_iter:
+            yield frame
+        return
+
+    for frame in realsense_lib.FrameGenerator(cast_cpp_camera_type(camera_type)):
+        arr = np.array(frame, copy=False)
+
+        # Can use `matplotlib.cm` to remap depths to RGB. Need to change camera format above.
+        # if camera_type == "depth":
+        #     arr = arr[..., 1].astype(np.float64) * 255.0 + arr[..., 0].astype(np.float64)
+        #     arr = (cm.jet(arr)[..., :3] * 255.0).astype(np.uint8)
+
+        if camera_type == "depth":
+            arr = arr[..., 1].astype(np.float64) * 255.0 + arr[..., 0].astype(np.float64)
+            # Normal scaling.
+            # arr = (arr / 256).astype(np.uint8)
+            # Inverse depth scaling.
+            arr = (255 * 1024 / (arr + 1024)).astype(np.uint8)
+
+        av_frame = av.video.frame.VideoFrame.from_ndarray(arr, format=get_camera_format(camera_type))
+        yield av_frame
+
+
+async def stream_jpeg_frames(camera_type: CameraType) -> AsyncIterable[bytes]:
     start_bytes = b"--frame\r\n" b"Content-Type: image/jpeg\r\n\r\n"
     end_bytes = b"\r\n"
     buffer = io.BytesIO()
-    async for frame in iter_frames():
+    async for frame in iter_realsense_frames(camera_type):
         img = frame.to_image()
         img.save(buffer, format="JPEG")
         img_bytes = buffer.getvalue()
@@ -79,8 +140,11 @@ async def stream_jpeg_frames() -> AsyncIterable[bytes]:
 
 
 @r.get("/")
-async def get_camera_feed() -> StreamingResponse:
-    return StreamingResponse(stream_jpeg_frames(), media_type="multipart/x-mixed-replace; boundary=frame")
+async def get_camera_feed(camera_type: str) -> StreamingResponse:
+    return StreamingResponse(
+        stream_jpeg_frames(cast_camera_type(camera_type)),
+        media_type="multipart/x-mixed-replace; boundary=frame",
+    )
 
 
 async def listen_for_message(ws: WebSocket, connection_active: asyncio.Event) -> None:
@@ -91,8 +155,8 @@ async def listen_for_message(ws: WebSocket, connection_active: asyncio.Event) ->
             return
 
 
-@r.websocket("/ws")
-async def get_camera_video_feed(ws: WebSocket) -> None:
+@r.websocket("/{camera}/ws")
+async def get_camera_video_feed(ws: WebSocket, camera: str) -> None:
     await ws.accept()
 
     connection_active = asyncio.Event()
@@ -101,7 +165,7 @@ async def get_camera_video_feed(ws: WebSocket) -> None:
     buffer = io.BytesIO()
 
     try:
-        async for frame in iter_frames():
+        async for frame in iter_realsense_frames(cast_camera_type(camera)):
             img = frame.to_image()
             img.save(buffer, format="JPEG")
             img_bytes = buffer.getvalue()
@@ -115,7 +179,7 @@ async def get_camera_video_feed(ws: WebSocket) -> None:
         logger.exception("Web socket is disconnected")
 
 
-async def test_iter_frames(total_seconds: float = 3.0, framerate: int = 30) -> None:
+async def test_iter_frames(total_seconds: float = 3.0) -> None:
     """Tests getting an input video stream using PyAV.
 
     Usage:
@@ -123,11 +187,11 @@ async def test_iter_frames(total_seconds: float = 3.0, framerate: int = 30) -> N
 
     Args:
         total_seconds: The total number of seconds of video to record
-        framerate: The framerate for recording the video
     """
 
     configure_logging()
 
+    framerate = 30  # Default value
     total_frames = int(math.ceil(total_seconds * framerate))
 
     output = av.open("output.mp4", mode="w")
@@ -138,7 +202,7 @@ async def test_iter_frames(total_seconds: float = 3.0, framerate: int = 30) -> N
 
     i = 0
 
-    async for frame in iter_frames(framerate=framerate):
+    async for frame in iter_realsense_frames("depth"):
         i += 1
         if i > total_frames:
             break

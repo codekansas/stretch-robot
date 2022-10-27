@@ -48,3 +48,9 @@ bot
   - [Stretch Body](https://github.com/hello-robot/stretch_body)
   - [Stretch Firmware](https://github.com/hello-robot/stretch_firmware)
   - [Stretch ROS](https://github.com/hello-robot/stretch_ros)
+
+## TODO
+
+- RealSense camera doesn't like having multiple streams open at once. Instead, will need to use a WebSocket manager pattern
+- Need to add the depth camera in addition to the RGB camera
+- Should try to derive a good way of visualizing camera extrinsics

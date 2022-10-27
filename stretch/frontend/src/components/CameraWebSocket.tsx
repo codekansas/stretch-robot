@@ -28,7 +28,6 @@ const camera_type_to_name = (c: CameraType) => {
     case "rgb":
       return "RGB";
   }
-  return "UNKNOWN";
 };
 
 export interface Props {
@@ -43,7 +42,7 @@ const CameraWebSocket = ({ camera }: Props) => {
     if (!show) return () => {};
 
     const ws = new WebSocket(
-      `ws://${window.location.host}/camera/ws`
+      `ws://${window.location.host}/camera/${camera}/ws`
     );
 
     ws.onmessage = (event) => setSrc(URL.createObjectURL(event.data));
