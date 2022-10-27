@@ -31,12 +31,12 @@ const CameraExtrinsics = () => {
   const [show, setShow] = React.useState<boolean>(false);
 
   return (
-    <Container>
+    <Container className="mt-3">
       <Row>
         <h3>Extrinsics</h3>
       </Row>
       <Row>
-        <ButtonToolbar className="m-1" style={styles.spinner}>
+        <ButtonToolbar className="mt-1" style={styles.spinner}>
           <ButtonGroup>
             <Button id="start" disabled={show} onClick={() => setShow(true)}>
               Start

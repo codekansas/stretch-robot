@@ -3,7 +3,7 @@ import Container from "react-bootstrap/Container";
 import Row from "react-bootstrap/Row";
 import "./App.css";
 import CameraExtrinsics from "./components/CameraExtrinsics";
-import CameraWebSocket from "./components/CameraWebSocket";
+import CameraFrames from "./components/CameraFrames";
 import Ping from "./components/Ping";
 
 const App = () => (
@@ -17,10 +17,10 @@ const App = () => (
       </Row>
       <Row>
         <Col lg={6}>
-          <CameraWebSocket camera="depth" />
+          <CameraFrames camera="depth" />
         </Col>
         <Col lg={6}>
-          <CameraWebSocket camera="rgb" />
+          <CameraFrames camera="rgb" />
         </Col>
       </Row>
       <Row>

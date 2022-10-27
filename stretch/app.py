@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 
 from stretch.backend.camera import router as camera_router
 from stretch.backend.ping import router as ping_router
+from stretch.utils.logging import configure_logging
 
 logger = logging.getLogger(__name__)
 
@@ -40,3 +41,6 @@ async def read_index() -> FileResponse:
 
 # Mounts frontend static files.
 app.mount("/", StaticFiles(directory=FRONTEND_ROOT), name="static")
+
+# Finally configure logging.
+configure_logging()

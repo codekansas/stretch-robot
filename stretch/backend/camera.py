@@ -4,12 +4,11 @@ import io
 import logging
 import math
 import platform
-from typing import AsyncIterable, Literal, Optional, cast, get_args
+from typing import Any, AsyncIterable, Dict, Literal, Optional, Set, cast, get_args
 
 import av
 import numpy as np
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from fastapi.responses import StreamingResponse
 
 from stretch.utils.logging import configure_logging
 
@@ -29,15 +28,6 @@ def cast_camera_type(raw_camera_type: str) -> CameraType:
     args = get_args(CameraType)
     assert raw_camera_type in args, f"Invalid camera type: {raw_camera_type}"
     return cast(CameraType, raw_camera_type)
-
-
-def cast_cpp_camera_type(camera_type: CameraType) -> realsense_lib.CameraType:
-    match camera_type:
-        case "rgb":
-            return realsense_lib.CameraType.rgb
-        case "depth":
-            return realsense_lib.CameraType.depth
-    raise KeyError(camera_type)
 
 
 async def iter_webcam_frames(
@@ -87,6 +77,15 @@ async def iter_webcam_frames(
         container.close()
 
 
+def get_cpp_camera_type(camera_type: CameraType) -> Any:
+    match camera_type:
+        case "rgb":
+            return realsense_lib.CameraType.rgb
+        case "depth":
+            return realsense_lib.CameraType.depth
+    raise KeyError(camera_type)
+
+
 def get_camera_format(camera_type: CameraType) -> str:
     match camera_type:
         case "rgb":
@@ -106,7 +105,7 @@ async def iter_realsense_frames(camera_type: CameraType) -> AsyncIterable[av.vid
             yield frame
         return
 
-    for frame in realsense_lib.FrameGenerator(cast_cpp_camera_type(camera_type)):
+    for frame in realsense_lib.FrameGenerator(get_cpp_camera_type(camera_type)):
         arr = np.array(frame, copy=False)
 
         # Can use `matplotlib.cm` to remap depths to RGB. Need to change camera format above.
@@ -125,58 +124,75 @@ async def iter_realsense_frames(camera_type: CameraType) -> AsyncIterable[av.vid
         yield av_frame
 
 
-async def stream_jpeg_frames(camera_type: CameraType) -> AsyncIterable[bytes]:
-    start_bytes = b"--frame\r\n" b"Content-Type: image/jpeg\r\n\r\n"
-    end_bytes = b"\r\n"
+class ConnectionManager:
+    def __init__(self) -> None:
+        self.web_sockets: Dict[CameraType, Set[WebSocket]] = {}
+        self.started = asyncio.Event()
+        self.task = asyncio.create_task(run_connection_manager(self))
+
+    async def connect(self, camera_type: CameraType, websocket: WebSocket) -> None:
+        await websocket.accept()
+        if camera_type in self.web_sockets:
+            self.web_sockets[camera_type].add(websocket)
+        else:
+            self.web_sockets[camera_type] = {websocket}
+        if not self.started.is_set():
+            logger.info("Starting camera stream")
+            self.started.set()
+
+    def disconnect(self, camera_type: CameraType, websocket: WebSocket) -> None:
+        self.web_sockets[camera_type].remove(websocket)
+        if not self.web_sockets[camera_type]:
+            self.web_sockets.pop(camera_type)
+        if not self.web_sockets:
+            logger.info("Stopping camera stream")
+            self.started.clear()
+
+
+async def run_connection_manager(manager: ConnectionManager) -> None:
     buffer = io.BytesIO()
-    async for frame in iter_realsense_frames(camera_type):
-        img = frame.to_image()
-        img.save(buffer, format="JPEG")
-        img_bytes = buffer.getvalue()
-        buffer.seek(0)
-        yield start_bytes
-        yield img_bytes
-        yield end_bytes
 
-
-@r.get("/")
-async def get_camera_feed(camera_type: str) -> StreamingResponse:
-    return StreamingResponse(
-        stream_jpeg_frames(cast_camera_type(camera_type)),
-        media_type="multipart/x-mixed-replace; boundary=frame",
-    )
-
-
-async def listen_for_message(ws: WebSocket, connection_active: asyncio.Event) -> None:
     while True:
-        message = await ws.receive()
-        if message["type"] == "websocket.disconnect":
-            connection_active.set()
-            return
+        await manager.started.wait()
 
-
-@r.websocket("/{camera}/ws")
-async def get_camera_video_feed(ws: WebSocket, camera: str) -> None:
-    await ws.accept()
-
-    connection_active = asyncio.Event()
-    asyncio.ensure_future(listen_for_message(ws, connection_active))
-
-    buffer = io.BytesIO()
-
-    try:
-        async for frame in iter_realsense_frames(cast_camera_type(camera)):
+        async for frame in iter_realsense_frames("rgb"):
             img = frame.to_image()
             img.save(buffer, format="JPEG")
             img_bytes = buffer.getvalue()
             buffer.seek(0)
-            if connection_active.is_set():
+            if not manager.started.is_set():
                 break
-            await ws.send_bytes(img_bytes)
+            await asyncio.gather(
+                *(
+                    ws.send_bytes(img_bytes)
+                    for wss in manager.web_sockets.values()
+                    for ws in wss
+                )
+            )
             await asyncio.sleep(0.01)
+
+
+connections = ConnectionManager()
+
+
+@r.websocket("/{camera}/ws")
+async def get_camera_video_feed(ws: WebSocket, camera: str) -> None:
+    camera_type = cast_camera_type(camera)
+
+    try:
+        await connections.connect(camera_type, ws)
+
+        # Receive until the websocket is closed by the client.
+        while True:
+            message = await ws.receive()
+            if message["type"] == "websocket.disconnect":
+                break
 
     except WebSocketDisconnect:
         logger.exception("Web socket is disconnected")
+
+    finally:
+        connections.disconnect(camera_type, ws)
 
 
 async def test_iter_frames(total_seconds: float = 3.0) -> None:
