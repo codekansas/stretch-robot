@@ -2,6 +2,7 @@ import Col from "react-bootstrap/Col";
 import Container from "react-bootstrap/Container";
 import Row from "react-bootstrap/Row";
 import "./App.css";
+import CameraExtrinsics from "./components/CameraExtrinsics";
 import CameraWebSocket from "./components/CameraWebSocket";
 import Ping from "./components/Ping";
 
@@ -15,9 +16,15 @@ const App = () => (
         </Col>
       </Row>
       <Row>
-        <Col>
+        <Col lg={6}>
           <CameraWebSocket />
         </Col>
+        <Col lg={6}>
+          <CameraWebSocket />
+        </Col>
+      </Row>
+      <Row>
+        <CameraExtrinsics />
       </Row>
     </Container>
   </div>

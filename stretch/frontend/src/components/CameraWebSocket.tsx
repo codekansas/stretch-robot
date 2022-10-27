@@ -1,18 +1,21 @@
 import React from "react";
-import { Container } from "react-bootstrap";
 import Button from "react-bootstrap/Button";
+import ButtonGroup from "react-bootstrap/ButtonGroup";
+import ButtonToolbar from "react-bootstrap/ButtonToolbar";
+import Container from "react-bootstrap/Container";
+import Row from "react-bootstrap/Row";
 import Spinner from "react-bootstrap/Spinner";
 
 const styles = {
-  spinner: {
+  centered: {
     justifyContent: "center",
     display: "flex",
     alignItems: "center",
   },
   image: {
     border: "1px solid black",
-    height: 480,
-    width: 640,
+    width: "100%",
+    aspectRatio: 4 / 3,
   },
 };
 
@@ -35,34 +38,35 @@ const CameraWebSocket = () => {
 
   return (
     <Container>
-      <Button
-        id="start"
-        className="m-1"
-        disabled={show}
-        onClick={() => setShow(true)}
-      >
-        Start
-      </Button>
-      <Button
-        id="stop"
-        className="m-1"
-        disabled={!show}
-        onClick={() => setShow(false)}
-      >
-        Stop
-      </Button>
+      <Row>
+        <h3>Camera</h3>
+      </Row>
+      <Row>
+        <ButtonToolbar className="m-1" style={styles.centered}>
+          <ButtonGroup>
+            <Button id="start" disabled={show} onClick={() => setShow(true)}>
+              Start
+            </Button>
+            <Button id="stop" disabled={!show} onClick={() => setShow(false)}>
+              Stop
+            </Button>
+          </ButtonGroup>
+        </ButtonToolbar>
+      </Row>
       {show ? (
-        <Container className="m-1">
-          {src === null ? (
-            <Container style={{ ...styles.image, ...styles.spinner }}>
-              <Spinner animation="border" role="status">
-                <span className="visually-hidden">Loading...</span>
-              </Spinner>
-            </Container>
-          ) : (
-            <img style={styles.image} src={src} alt="Video stream" />
-          )}
-        </Container>
+        <Row>
+          <Container className="m-1">
+            {src === null ? (
+              <Container style={{ ...styles.image, ...styles.centered }}>
+                <Spinner animation="border" role="status">
+                  <span className="visually-hidden">Loading...</span>
+                </Spinner>
+              </Container>
+            ) : (
+              <img style={styles.image} src={src} alt="Video stream" />
+            )}
+          </Container>
+        </Row>
       ) : null}
     </Container>
   );
