@@ -17,10 +17,10 @@ const App = () => (
       </Row>
       <Row>
         <Col lg={6}>
-          <CameraWebSocket />
+          <CameraWebSocket camera="depth" />
         </Col>
         <Col lg={6}>
-          <CameraWebSocket />
+          <CameraWebSocket camera="rgb" />
         </Col>
       </Row>
       <Row>

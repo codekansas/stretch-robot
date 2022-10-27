@@ -19,14 +19,32 @@ const styles = {
   },
 };
 
-const CameraWebSocket = () => {
+type CameraType = "depth" | "rgb";
+
+const camera_type_to_name = (c: CameraType) => {
+  switch (c) {
+    case "depth":
+      return "Depth";
+    case "rgb":
+      return "RGB";
+  }
+  return "UNKNOWN";
+};
+
+export interface Props {
+  camera: CameraType;
+}
+
+const CameraWebSocket = ({ camera }: Props) => {
   const [show, setShow] = React.useState<boolean>(false);
   const [src, setSrc] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     if (!show) return () => {};
 
-    const ws = new WebSocket(`ws://${window.location.host}/camera/ws`);
+    const ws = new WebSocket(
+      `ws://${window.location.host}/camera/ws`
+    );
 
     ws.onmessage = (event) => setSrc(URL.createObjectURL(event.data));
 
@@ -39,7 +57,7 @@ const CameraWebSocket = () => {
   return (
     <Container>
       <Row>
-        <h3>Camera</h3>
+        <h3>{camera_type_to_name(camera)} Camera</h3>
       </Row>
       <Row>
         <ButtonToolbar className="m-1" style={styles.centered}>
