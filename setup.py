@@ -51,7 +51,10 @@ class CMakeBuild(build_ext):
         cmake_cxx_flags += [f"-isystem {dir_name}" for dir_name in cmake_include_dirs]
 
         # Gets the CMake prefix path.
-        cmake_prefix_path = ";".join([pybind11.get_cmake_dir()])
+        cmake_prefix_paths = [pybind11.get_cmake_dir()]
+        if "CONDA_PREFIX" in os.environ:
+            cmake_prefix_paths.append(os.path.join(os.environ["CONDA_PREFIX"], "lib", "cmake"))
+        cmake_prefix_path = ";".join(cmake_prefix_paths)
 
         # Gets the path to the Python installation.
         if not (python_path := shutil.which("python")):
